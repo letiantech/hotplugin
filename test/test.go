@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"go-hotplugin/hotplugin"
+	"hotplugin"
 	"time"
 )
 
