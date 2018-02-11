@@ -1,12 +1,33 @@
+// Copyright (c) 2017 letian0805@gmail.com
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 package hotplugin
 
 import (
 	"errors"
-	"github.com/fsnotify/fsnotify"
 	"io"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 type ManagerOptions struct {
@@ -14,7 +35,20 @@ type ManagerOptions struct {
 	Suffix string
 }
 
-type Manager struct {
+type Manager interface {
+	Run() error
+	IsRunning() bool
+	GetPlugin(name string) (*Plugin, error)
+	GetPluginWithVersion(name string, version uint64) (*Plugin, error)
+	GetFunc(module, function string) (f func(...interface{}) []interface{}, err error)
+	Call(module, function string, args ...interface{}) []interface{}
+	OnLoaded(p *Plugin)
+	OnReloaded(p *Plugin)
+	OnUnloaded(p *Plugin)
+	OnError(p *Plugin, err *PluginError)
+}
+
+type manager struct {
 	running bool
 	options ManagerOptions
 	watcher *fsnotify.Watcher
@@ -22,13 +56,13 @@ type Manager struct {
 	loaded  map[string]map[uint64]*Plugin
 }
 
-func NewManager(options ManagerOptions) (*Manager, error) {
+func NewManager(options ManagerOptions) (Manager, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Print("error: ", err)
 		return nil, err
 	}
-	m := &Manager{
+	m := &manager{
 		options: options,
 		watcher: watcher,
 		running: false,
@@ -38,42 +72,52 @@ func NewManager(options ManagerOptions) (*Manager, error) {
 	return m, nil
 }
 
-func (m *Manager) pluginPath(path string) string {
+func (m *manager) pluginPath(path string) string {
 	if !strings.Contains(path, m.options.Dir) {
-		path = m.options.Dir + "/" + path
+		dir := []byte(m.options.Dir)
+		if dir[len(dir)-1] != '/' {
+			path = m.options.Dir + "/" + path
+		} else {
+			path = m.options.Dir + path
+		}
 	}
 	return path
 }
 
-func (m *Manager) pluginOptions() PluginOptions {
-	return PluginOptions{
-		OnLoaded: func(p1 *Plugin) {
-			name := p1.Name()
-			version := p1.Version()
-			log.Print(name, " loaded")
-			if mp, ok := m.loaded[name]; ok {
-				mp[version] = p1
-			} else {
-				mp := make(map[uint64]*Plugin)
-				mp[version] = p1
-				m.loaded[name] = mp
-			}
-		},
-		OnUnloaded: func(p1 *Plugin) {
-			name := p1.Name()
-			version := p1.Version()
-			log.Print(name, " loaded")
-			if mp, ok := m.loaded[name]; ok {
-				delete(mp, version)
-				if len(mp) == 0 {
-					delete(m.loaded, name)
-				}
-			}
-		},
+func (m *manager) OnReloaded(p *Plugin) {
+
+}
+
+func (m *manager) OnError(p *Plugin, err *PluginError) {
+
+}
+
+func (m *manager) OnUnloaded(p1 *Plugin) {
+	name := p1.Name()
+	version := p1.Version()
+	log.Print(name, " loaded")
+	if mp, ok := m.loaded[name]; ok {
+		delete(mp, version)
+		if len(mp) == 0 {
+			delete(m.loaded, name)
+		}
 	}
 }
 
-func (m *Manager) LoadAll() error {
+func (m *manager) OnLoaded(p1 *Plugin) {
+	name := p1.Name()
+	version := p1.Version()
+	log.Print(name, " loaded")
+	if mp, ok := m.loaded[name]; ok {
+		mp[version] = p1
+	} else {
+		mp := make(map[uint64]*Plugin)
+		mp[version] = p1
+		m.loaded[name] = mp
+	}
+}
+
+func (m *manager) loadAll() error {
 	if m.running {
 		return nil
 	}
@@ -92,10 +136,11 @@ func (m *Manager) LoadAll() error {
 		}
 		for i := 0; i < len(d); i++ {
 			path := m.pluginPath(d[i].Name())
-			if !m.IsPlugin(path) {
+			if !m.isPlugin(path) {
 				continue
 			}
-			p := NewPlugin(path, m.pluginOptions())
+			log.Println(path)
+			p := NewPlugin(path, m)
 			m.cache[path] = p
 			p.Load()
 		}
@@ -103,67 +148,82 @@ func (m *Manager) LoadAll() error {
 	return nil
 }
 
-func (m *Manager) IsPlugin(path string) bool {
+func (m *manager) isPlugin(path string) bool {
 	return strings.HasSuffix(path, m.options.Suffix)
 }
 
-func (m *Manager) Run() error {
+func (m *manager) Run() error {
 	if m.running {
 		return nil
 	}
-	m.LoadAll()
-	m.watcher.Add(m.options.Dir)
-	m.running = true
-	for {
-		select {
-		case e := <-m.watcher.Events:
-			path := m.pluginPath(e.Name)
-			log.Print(e)
-			if !m.IsPlugin(path) {
-				continue
-			}
-			p, ok := m.cache[path]
-			if !ok || p == nil {
-				p = NewPlugin(path, m.pluginOptions())
-				m.cache[path] = p
-			}
-			if e.Op&fsnotify.Write == fsnotify.Write {
-				p.Reload()
-				continue
-			}
-			if e.Op&fsnotify.Create == fsnotify.Create {
-				p.Load()
-				continue
-			}
-			if e.Op&fsnotify.Remove == fsnotify.Remove {
-				p.Unload()
-				continue
-			}
-		case err := <-m.watcher.Errors:
-			log.Print(err)
-			return err
-		}
+	e := m.loadAll()
+	if e != nil {
+		log.Println(e.Error())
+		return e
 	}
+	e = m.watcher.Add(m.options.Dir)
+	if e != nil {
+		log.Println(e.Error())
+		return e
+	}
+	c := make(chan int, 1)
+	go func() {
+		m.running = true
+		c <- 1
+		for {
+			select {
+			case e := <-m.watcher.Events:
+				path := m.pluginPath(e.Name)
+				log.Print(e)
+				if !m.isPlugin(path) {
+					continue
+				}
+				p, ok := m.cache[path]
+				if !ok || p == nil {
+					log.Println(path)
+					p = NewPlugin(path, m)
+					m.cache[path] = p
+				}
+				if e.Op&fsnotify.Write == fsnotify.Write {
+					p.Reload()
+					continue
+				}
+				if e.Op&fsnotify.Create == fsnotify.Create {
+					p.Load()
+					continue
+				}
+				if e.Op&fsnotify.Remove == fsnotify.Remove {
+					p.Unload()
+					continue
+				}
+			case err := <-m.watcher.Errors:
+				log.Print(err)
+				continue
+			}
+		}
+	}()
+	<-c
+	close(c)
 	return nil
 }
 
-func (m *Manager) GetPlugin(name string) (*Plugin, error) {
+func (m *manager) GetPlugin(name string) (*Plugin, error) {
 	mp, ok := m.loaded[name]
 	if !ok {
 		return nil, errors.New("not found")
 	}
-	var latest_version uint64 = 0
-	var latest_plugin *Plugin = nil
+	var latestVersion uint64 = 0
+	var latestPlugin *Plugin = nil
 	for v, p := range mp {
-		if latest_version < v {
-			latest_version = v
-			latest_plugin = p
+		if latestVersion < v {
+			latestVersion = v
+			latestPlugin = p
 		}
 	}
-	return latest_plugin, nil
+	return latestPlugin, nil
 }
 
-func (m *Manager) GetPluginWithVersion(name string, version uint64) (*Plugin, error) {
+func (m *manager) GetPluginWithVersion(name string, version uint64) (*Plugin, error) {
 	mp, ok := m.loaded[name]
 	if !ok {
 		return nil, errors.New("not found")
@@ -175,6 +235,29 @@ func (m *Manager) GetPluginWithVersion(name string, version uint64) (*Plugin, er
 	return p, nil
 }
 
-func (m *Manager) IsRunning() bool {
+func (m *manager) GetFunc(module, function string) (f func(...interface{}) []interface{}, err error) {
+	var p *Plugin = nil
+	p, err = m.GetPlugin(module)
+	if err != nil {
+		return
+	}
+	if p == nil {
+		err = errors.New("no plugin " + module)
+		return
+	}
+
+	return p.GetFunc(function)
+}
+
+func (m *manager) Call(module, function string, args ...interface{}) []interface{} {
+	f, err := m.GetFunc(module, function)
+	if err != nil {
+		return []interface{}{err}
+	}
+
+	return f(args...)
+}
+
+func (m *manager) IsRunning() bool {
 	return m.running
 }

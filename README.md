@@ -2,11 +2,11 @@
 golang plugin framework for hot update, go version >= 1.8
 
 # usage
-- 1. get go-hotplugin
+1. get go-hotplugin
 ```bash
 go get github.com/letian0805/go-hotplugin
 ```
-- 2. write a plugin with Load, Unload and other functions like this
+2. write a plugin with Load, Unload and other functions like this
 ```go
 //testplugin.go
 package main
@@ -34,39 +34,31 @@ func Test(data string) string {
 }
 ```
 
-- 3. build your plugin
+3. build your plugin
 ```bash
 go build -buildmode ./testplugin.go
 ```
 
-- 4. save your testplugin.so to /path/of/plugin/dir
+4. save your testplugin.so to /path/of/plugin/dir
 
-- 5. write main.go like this
+5. write main.go like this
 ```go
 //main.go
 package main
 
 import (
-    "go-hotplugin/hotplugin"
-    "time"
-    "fmt"
+	"fmt"
+	"hotplugin"
 )
 
 func main() {
-    options := hotplugin.ManagerOptions{
-        Dir:    "/path/of/plugin/dir",
-        Suffix: ".so",
-    }
-    go hotplugin.StartManager(options)
-
-    // sleep to wait plugin loaded
-    time.Sleep(5 * time.Second)
-
-    //call some functions of your plugin
-    results := hotplugin.Call("testplugin", "Test", "my world")
-    fmt.Println(results...)
-
-    select{}
+	options := hotplugin.ManagerOptions{
+		Dir:    "./",
+		Suffix: ".so",
+	}
+	hotplugin.StartManager(options)
+	result := hotplugin.Call("testplugin", "Test", "my world")
+	fmt.Println(result...)
 }
 
 ```

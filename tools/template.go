@@ -22,15 +22,20 @@ package main
 
 import (
 	"fmt"
-	"hotplugin"
 )
 
-func main() {
-	options := hotplugin.ManagerOptions{
-		Dir:    "./",
-		Suffix: ".so",
-	}
-	hotplugin.StartManager(options)
-	result := hotplugin.Call("testplugin", "Test", "my world")
-	fmt.Println(result...)
+var plugin_name = "PLUGINNAME"
+
+var plugin_version uint64 = PLUGINVERSION
+
+func Load() (name string, version uint64, err error) {
+	//do something here
+	fmt.Printf("load %s, version: %d\n", plugin_name, plugin_version)
+	return plugin_name, plugin_version, nil
+}
+
+func Unload() error {
+	//do something here
+	fmt.Printf("unload %s, version: %d\n", plugin_name, plugin_version)
+	return nil
 }
