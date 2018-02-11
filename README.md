@@ -1,3 +1,5 @@
+[![Build Status](https://api.travis-ci.org/letiantech/hotplugin.svg)](https://travis-ci.org/letiantech/hotplugin)
+
 # hotplugin
 golang plugin framework for hot update, go version >= 1.8
 
