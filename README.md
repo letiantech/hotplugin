@@ -1,10 +1,10 @@
-# go-hotplugin
+# hotplugin
 golang plugin framework for hot update, go version >= 1.8
 
 # usage
-1. get go-hotplugin
+1. get hotplugin
 ```bash
-go get github.com/letian0805/go-hotplugin
+go get github.com/letiantech/hotplugin
 ```
 2. write a plugin with Load, Unload and other functions like this
 ```go
@@ -12,25 +12,32 @@ go get github.com/letian0805/go-hotplugin
 package main
 
 import (
-    "fmt"
+	"fmt"
+	"log"
 )
 
-var plugin_name = "testplugin"
+const (
+	pluginName    = "testplugin"
+	pluginVersion = 0x00010000
+)
 
-var plugin_version uint64 = 0x00010000
-
-func Load() (name string, version uint64, err error) {
-    fmt.Printf("loading test plugin\n")
-    return plugin_name, plugin_version, nil
+func Load(register func(name string, version uint64) error) error {
+	err := register(pluginName, pluginVersion)
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
+	log.Println("loading test plugin")
+	return nil
 }
 
 func Unload() error {
-    fmt.Printf("unload %s, version: 0x%x\n", plugin_name, plugin_version)
-    return nil
+	fmt.Printf("unload %s, version: 0x%x\n", pluginName, pluginVersion)
+	return nil
 }
 
 func Test(data string) string {
-    return "hello " + data
+	return "hello " + data
 }
 ```
 
