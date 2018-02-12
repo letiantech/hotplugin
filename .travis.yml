@@ -1,6 +1,14 @@
+sudo: false
 language: go
 
-script:
-	- godep get
-	- go build -mode=plugin test/testplugin.go
-	- go run test/test.go
+go:
+	- 1.8.x
+	- 1.9.x
+	- 1.10.x
+	- tip
+
+matrix:
+	allow_failures:
+		- go: tip
+
+script: ./test.sh
