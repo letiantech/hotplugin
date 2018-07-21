@@ -45,7 +45,7 @@ func Test(data string) string {
 
 3. build your plugin
 ```bash
-go build -buildmode ./testplugin.go
+go build -buildmode=plugin ./testplugin.go
 ```
 
 4. save your testplugin.so to /path/of/plugin/dir
