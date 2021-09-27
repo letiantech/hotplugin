@@ -22,7 +22,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/letiantech/hotplugin"
+	"github.com/hepeichun/hotplugin"
 )
 
 func main() {
