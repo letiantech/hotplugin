@@ -1,4 +1,4 @@
-module github.com/letiantech/hotplugin
+module github.com/hepeichun/hotplugin
 
 go 1.12
 
