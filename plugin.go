@@ -213,14 +213,14 @@ func (p *Plugin) GetFunc(fun string) (f func(...interface{}) []interface{}, err 
 		in := make([]reflect.Value, len(params))
 		for k, param := range params {
 			in[k] = reflect.ValueOf(param)
-			if info.inTypes[k].Name() != in[k].Type().Name() {
+			/*if info.inTypes[k].Name() != in[k].Type().Name() {
 				err := fmt.Sprintf("the type of params is not adapted, params[%d] require type %s",
 					k, info.inTypes[k].Name())
 				err = fmt.Sprintf("failed to call [%s], %s", info.rft.Name(), err)
 				log.Println(err)
 				out[len(out)-1] = errors.New(err)
 				return out
-			}
+			}*/
 		}
 		result := info.rfv.Call(in)
 		for i := 0; i < len(result); i++ {

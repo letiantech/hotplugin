@@ -6,7 +6,7 @@ golang plugin framework for hot update, go version >= 1.8
 # usage
 1. get hotplugin
 ```bash
-go get github.com/letiantech/hotplugin
+go get github.com/hepeichun/hotplugin
 ```
 2. write a plugin with Load, Unload and other functions like this
 ```go
