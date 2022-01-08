@@ -26,11 +26,12 @@ import (
 	"log"
 	"plugin"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
-const PLUGIN_TIMEOUT = 100 * time.Millisecond
+const PluginTimeout = 100 * time.Millisecond
 
 type PluginStatus int32
 
@@ -58,6 +59,7 @@ type pluginFuncInfo struct {
 }
 
 type Plugin struct {
+	sync.RWMutex
 	m       Manager
 	name    string
 	version uint64
@@ -100,6 +102,8 @@ func (p *Plugin) Path() string {
 }
 
 func (p *Plugin) Load() error {
+	p.Lock()
+	defer p.Unlock()
 	if p.Status() != PluginStatusNone && p.Status() != PluginStatusUnloaded {
 		return nil
 	}
@@ -141,6 +145,14 @@ func (p *Plugin) Load() error {
 }
 
 func (p *Plugin) Reload() error {
+	if err := p.Unload(); err != nil {
+		return err
+	}
+	if err := p.Load(); err != nil {
+		return err
+	}
+	p.RLock()
+	defer p.RUnlock()
 	name := p.name
 	version := p.version
 	s := fmt.Sprintf("reload plugin: %s, version: 0x%x", name, version)
@@ -150,11 +162,14 @@ func (p *Plugin) Reload() error {
 }
 
 func (p *Plugin) Unload() error {
+	p.Lock()
+	defer p.Unlock()
 	if p.Status() == PluginStatusUnloaded ||
 		p.Status() == PluginStatusUnloading ||
 		p.Status() == PluginStatusNone {
 		return nil
 	}
+	p.cache = make(map[string]*pluginFuncInfo)
 	name := p.name
 	version := p.version
 	s := fmt.Sprintf("unload plugin: %s, version: 0x%x", name, version)
@@ -178,6 +193,8 @@ func (p *Plugin) Call(fun string, params ...interface{}) []interface{} {
 }
 
 func (p *Plugin) GetFunc(fun string) (f func(...interface{}) []interface{}, err error) {
+	p.Lock()
+	defer p.Unlock()
 	if p.plugin == nil {
 		err = errors.New("plugin not loaded")
 		return
@@ -201,7 +218,7 @@ func (p *Plugin) GetFunc(fun string) (f func(...interface{}) []interface{}, err 
 		info.inTypes[i] = info.rfv.Type().In(i)
 	}
 	for i := 0; i < lo; i++ {
-		info.inTypes[i] = info.rfv.Type().Out(i)
+		info.outTypes[i] = info.rfv.Type().Out(i)
 	}
 	f = func(params ...interface{}) []interface{} {
 		out := make([]interface{}, len(info.outTypes))

@@ -22,29 +22,17 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"time"
+
+	"github.com/letiantech/hotplugin"
 )
 
-const (
-	pluginName    = "testplugin"
-	pluginVersion = 0x00010000
-)
-
-func Load(register func(name string, version uint64) error) error {
-	err := register(pluginName, pluginVersion)
-	if err != nil {
-		log.Println(err.Error())
-		return err
+func main() {
+	options := hotplugin.ManagerOptions{
+		Dir:    "./",
+		Suffix: ".so",
 	}
-	log.Println("loading test plugin")
-	return nil
-}
-
-func Unload() error {
-	fmt.Printf("unload %s, version: 0x%x\n", pluginName, pluginVersion)
-	return nil
-}
-
-func Test(data string) string {
-	return "hello " + data
+	hotplugin.StartManager(options)
+	result := hotplugin.Call("testplugin", "Test", time.Now())
+	fmt.Println(result...)
 }
